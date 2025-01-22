@@ -54,7 +54,7 @@ export default class FileChuckerPlugin extends Plugin {
 			id: "chuck-file",
 			name: "Chuck File",
 			checkCallback: (checking) => {
-				const sort_order: SORT_ORDER = this.app.workspace.getLeavesOfType('file-explorer')?.first()?.getViewState().state.sortOrder;
+				const sort_order: SORT_ORDER = this.app.workspace.getLeavesOfType('file-explorer')?.first()?.getViewState()?.state?.sortOrder ?? FileChuckerPlugin.localeSorter;
 				// console.log(`${sort_order}`);
 				const currentFile = this.app.workspace.getActiveFile();
 				if (currentFile) {
