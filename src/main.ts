@@ -17,7 +17,7 @@ import { FolderSuggest } from "./FolderSuggestor";
 
 type SortFn = (a: TFile, b: TFile) => number;
 
-type SORT_ORDER = 'alphabetical' | 'byCreatedTime' | 'byModifiedTime';
+type SORT_ORDER = 'alphabetical' | 'alphabeticalReverse' | 'byCreatedTime' | 'byCreatedTimeReverse' | 'byModifiedTime' | 'byModifiedTimeReverse';
 
 interface FileChuckerPluginSettings {
 	archive_folder: string,
@@ -36,15 +36,27 @@ export default class FileChuckerPlugin extends Plugin {
 			undefined,
 			{ numeric: true, sensitivity: 'base' }
 		);
+	
+	public static localeSorterReverse: SortFn = (a: TFile, b: TFile) =>
+		b.basename.localeCompare(
+			a.basename,
+			undefined,
+			{ numeric: true, sensitivity: 'base' }
+		);
 
 	public static mtimeSorter: SortFn = (a: TFile, b: TFile) => { return a.stat.mtime - b.stat.mtime; };
+	public static mtimeSorterReverse: SortFn = (a: TFile, b: TFile) => { return b.stat.mtime - a.stat.mtime; };
 
 	public static ctimeSorter: SortFn = (a: TFile, b: TFile) => { return a.stat.ctime - b.stat.ctime; };
+	public static ctimeSorterReverse: SortFn = (a: TFile, b: TFile) => { return b.stat.ctime - a.stat.ctime; };
 
 	static sorters: Record<SORT_ORDER, SortFn> = {
 		alphabetical: this.localeSorter,
+		alphabeticalReverse: this.localeSorterReverse,
 		byCreatedTime: this.ctimeSorter,
+		byCreatedTimeReverse: this.ctimeSorterReverse,
 		byModifiedTime: this.mtimeSorter,
+		byModifiedTimeReverse: this.mtimeSorterReverse,
 	};
 
 	async onload() {
