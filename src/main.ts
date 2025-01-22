@@ -46,7 +46,7 @@ export default class FileChuckerPlugin extends Plugin {
 
 				const currentFile = this.app.workspace.getActiveFile();
 				if (currentFile) {
-					const originalFolder = currentFile?.parent;
+					const originalFolder = currentFile?.parent ?? this.app.vault.getRoot();
 					const specifiedFolderPath = this.settings.archive_folder;
 					if (specifiedFolderPath != originalFolder.path) {(async () => {
 				
@@ -61,22 +61,22 @@ export default class FileChuckerPlugin extends Plugin {
 							);;
 						const files: TFile[] = originalFolder.children.filter(isAFile).sort(sortFn);
 						const currentItem = files.findIndex((item) => item.name === currentFile.name);
-						const targetFolder = app.vault.getAbstractFileByPath(specifiedFolderPath);
+						const targetFolder = this.app.vault.getAbstractFileByPath(specifiedFolderPath);
 						if (targetFolder === null) {
 							// console.log(
 							// 	`${specifiedFolderPath} does not exist. Creating now...`
 							// );
-							await app.vault.createFolder(specifiedFolderPath);
+							await this.app.vault.createFolder(specifiedFolderPath);
 						}
 						const newFilePath =
 							specifiedFolderPath + "/" + currentFile.name;
 						const toFile = files[(currentItem + 1) % files.length]
-						const newLeaf = app.workspace.getLeaf();
+						const newLeaf = this.app.workspace.getLeaf();
 						await newLeaf.openFile(toFile as TFile);
 						// console.log(
 						// 	`Moving ${currentFile.path} to ${newFilePath}`
 						// );
-						await app.fileManager.renameFile(currentFile, newFilePath);
+						await this.app.fileManager.renameFile(currentFile, newFilePath);
 					})()};
 				}
 			},
