@@ -1,10 +1,10 @@
 {
-	"id": "file-chucker",
-	"name": "File Chucker",
-	"version": "1.0.1",
+	"id": "quick-archive",
+	"name": "Quick Archive",
+	"version": "1.0.0",
 	"minAppVersion": "1.0.3",
-	"description": "Quickly move a file to a new or existing folder, then open the next file.",
-	"author": "Ken Lim",
-	"authorUrl": "https://github.com/kenlim/obsidian-file-chucker",
+	"description": "Plugin that allows you to quickly archive files.",
+	"author": "Brendon Felix",
+	"authorUrl": "https://github.com/brendon-felix/obsidian-quick-archive",
 	"isDesktopOnly": false
 }
