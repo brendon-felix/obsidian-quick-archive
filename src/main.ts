@@ -43,7 +43,8 @@ export default class FileChuckerPlugin extends Plugin {
 				// }
 				// let view = this.app.workspace.getActiveViewOfType(MarkdownView);
 				// if (!view || !(view instanceof MarkdownView)) return;
-
+				const settings = this.app.workspace.getLeavesOfType('file-explorer')[0].view;
+				console.log(`${settings}`);
 				const currentFile = this.app.workspace.getActiveFile();
 				if (currentFile) {
 					const originalFolder = currentFile?.parent ?? this.app.vault.getRoot();
