@@ -31,7 +31,7 @@ export default class FileChuckerPlugin extends Plugin {
 	settings: FileChuckerPluginSettings;
 
 	public static localeSorter: SortFn = (a: TFile, b: TFile) =>
-		a.basename.localeCompare(
+		a.basename.localeCompare( 
 			b.basename,
 			undefined,
 			{ numeric: true, sensitivity: 'base' }
@@ -44,11 +44,11 @@ export default class FileChuckerPlugin extends Plugin {
 			{ numeric: true, sensitivity: 'base' }
 		);
 
-	public static mtimeSorter: SortFn = (a: TFile, b: TFile) => { return a.stat.mtime - b.stat.mtime; };
-	public static mtimeSorterReverse: SortFn = (a: TFile, b: TFile) => { return b.stat.mtime - a.stat.mtime; };
+	public static mtimeSorterReverse: SortFn = (a: TFile, b: TFile) => { return a.stat.mtime - b.stat.mtime; };
+	public static mtimeSorter: SortFn = (a: TFile, b: TFile) => { return b.stat.mtime - a.stat.mtime; };
 
-	public static ctimeSorter: SortFn = (a: TFile, b: TFile) => { return a.stat.ctime - b.stat.ctime; };
-	public static ctimeSorterReverse: SortFn = (a: TFile, b: TFile) => { return b.stat.ctime - a.stat.ctime; };
+	public static ctimeSorterReverse: SortFn = (a: TFile, b: TFile) => { return a.stat.ctime - b.stat.ctime; };
+	public static ctimeSorter: SortFn = (a: TFile, b: TFile) => { return b.stat.ctime - a.stat.ctime; };
 
 	static sorters: Record<SORT_ORDER, SortFn> = {
 		alphabetical: this.localeSorter,
@@ -67,7 +67,7 @@ export default class FileChuckerPlugin extends Plugin {
 			name: "Chuck File",
 			checkCallback: (checking) => {
 				const sort_order: SORT_ORDER = this.app.workspace.getLeavesOfType('file-explorer')?.first()?.getViewState()?.state?.sortOrder as SORT_ORDER ?? FileChuckerPlugin.localeSorter;
-				// console.log(`${sort_order}`);
+				console.log(`${sort_order}`);
 				const currentFile = this.app.workspace.getActiveFile();
 				if (currentFile) {
 					const originalFolder = currentFile?.parent ?? this.app.vault.getRoot();
