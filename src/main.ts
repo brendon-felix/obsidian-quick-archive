@@ -15,7 +15,9 @@ import {
 
 import { FolderSuggest } from "./FolderSuggestor";
 
-export type SortFn = (a: TFile, b: TFile) => number;
+type SortFn = (a: TFile, b: TFile) => number;
+
+type SORT_ORDER = 'alphabetical' | 'byCreatedTime' | 'byModifiedTime';
 
 interface FileChuckerPluginSettings {
 	archive_folder: string,
@@ -28,6 +30,23 @@ const DEFAULT_SETTINGS: FileChuckerPluginSettings = {
 export default class FileChuckerPlugin extends Plugin {
 	settings: FileChuckerPluginSettings;
 
+	public static localeSorter: SortFn = (a: TFile, b: TFile) =>
+		a.basename.localeCompare(
+			b.basename,
+			undefined,
+			{ numeric: true, sensitivity: 'base' }
+		);
+
+	public static mtimeSorter: SortFn = (a: TFile, b: TFile) => { return a.stat.mtime - b.stat.mtime; };
+
+	public static ctimeSorter: SortFn = (a: TFile, b: TFile) => { return a.stat.ctime - b.stat.ctime; };
+
+	static sorters: Record<SORT_ORDER, SortFn> = {
+		alphabetical: this.localeSorter,
+		byCreatedTime: this.ctimeSorter,
+		byModifiedTime: this.mtimeSorter,
+	};
+
 	async onload() {
 		await this.loadSettings();
 
@@ -35,16 +54,8 @@ export default class FileChuckerPlugin extends Plugin {
 			id: "chuck-file",
 			name: "Chuck File",
 			checkCallback: (checking) => {
-				// if (checking) {
-				// 	// make sure the active view is a MarkdownView.
-				// 	return !!this.app.workspace.getActiveViewOfType(
-				// 		MarkdownView
-				// 	);
-				// }
-				// let view = this.app.workspace.getActiveViewOfType(MarkdownView);
-				// if (!view || !(view instanceof MarkdownView)) return;
-				const settings = this.app.workspace.getLeavesOfType('file-explorer')[0].view;
-				console.log(`${settings}`);
+				const sort_order: SORT_ORDER = this.app.workspace.getLeavesOfType('file-explorer')?.first()?.getViewState().state.sortOrder;
+				// console.log(`${sort_order}`);
 				const currentFile = this.app.workspace.getActiveFile();
 				if (currentFile) {
 					const originalFolder = currentFile?.parent ?? this.app.vault.getRoot();
@@ -54,12 +65,7 @@ export default class FileChuckerPlugin extends Plugin {
 						const isAFile = (thing: TAbstractFile): thing is TFile => {
 							return thing instanceof TFile;
 						};
-						const sortFn: SortFn = (a: TFile, b: TFile) =>
-							a.basename.localeCompare(
-								b.basename,
-								undefined,
-								{ numeric: true, sensitivity: 'base' }
-							);;
+						const sortFn: SortFn = FileChuckerPlugin.sorters[sort_order];
 						const files: TFile[] = originalFolder.children.filter(isAFile).sort(sortFn);
 						const currentItem = files.findIndex((item) => item.name === currentFile.name);
 						const targetFolder = this.app.vault.getAbstractFileByPath(specifiedFolderPath);
