@@ -45,38 +45,40 @@ export default class FileChuckerPlugin extends Plugin {
 				if (!view || !(view instanceof MarkdownView)) return;
 
 				const currentFile = view.file;
-				const originalFolder = currentFile.parent;
-				const specifiedFolderPath = this.settings.archive_folder;
-				if (specifiedFolderPath != originalFolder.path) {(async () => {
-			
-					const isAFile = (thing: TAbstractFile): thing is TFile => {
-						return thing instanceof TFile;
-					};
-					const sortFn: SortFn = (a: TFile, b: TFile) =>
-						a.basename.localeCompare(
-							b.basename,
-							undefined,
-							{ numeric: true, sensitivity: 'base' }
-						);;
-					const files: TFile[] = originalFolder.children.filter(isAFile).sort(sortFn);
-					const currentItem = files.findIndex((item) => item.name === currentFile.name);
-					const targetFolder = app.vault.getAbstractFileByPath(specifiedFolderPath);
-					if (targetFolder === null) {
+				if (currentFile) {
+					const originalFolder = currentFile.parent;
+					const specifiedFolderPath = this.settings.archive_folder;
+					if (specifiedFolderPath != originalFolder.path) {(async () => {
+				
+						const isAFile = (thing: TAbstractFile): thing is TFile => {
+							return thing instanceof TFile;
+						};
+						const sortFn: SortFn = (a: TFile, b: TFile) =>
+							a.basename.localeCompare(
+								b.basename,
+								undefined,
+								{ numeric: true, sensitivity: 'base' }
+							);;
+						const files: TFile[] = originalFolder.children.filter(isAFile).sort(sortFn);
+						const currentItem = files.findIndex((item) => item.name === currentFile.name);
+						const targetFolder = app.vault.getAbstractFileByPath(specifiedFolderPath);
+						if (targetFolder === null) {
+							// console.log(
+							// 	`${specifiedFolderPath} does not exist. Creating now...`
+							// );
+							await app.vault.createFolder(specifiedFolderPath);
+						}
+						const newFilePath =
+							specifiedFolderPath + "/" + currentFile.name;
+						const toFile = files[(currentItem + 1) % files.length]
+						const newLeaf = app.workspace.getLeaf();
+						await newLeaf.openFile(toFile as TFile);
 						// console.log(
-						// 	`${specifiedFolderPath} does not exist. Creating now...`
+						// 	`Moving ${currentFile.path} to ${newFilePath}`
 						// );
-						await app.vault.createFolder(specifiedFolderPath);
-					}
-					const newFilePath =
-						specifiedFolderPath + "/" + currentFile.name;
-					const toFile = files[(currentItem + 1) % files.length]
-					const newLeaf = app.workspace.getLeaf();
-					await newLeaf.openFile(toFile as TFile);
-					// console.log(
-					// 	`Moving ${currentFile.path} to ${newFilePath}`
-					// );
-					await app.fileManager.renameFile(currentFile, newFilePath);
-				})()};
+						await app.fileManager.renameFile(currentFile, newFilePath);
+					})()};
+				}
 			},
 		});
 
