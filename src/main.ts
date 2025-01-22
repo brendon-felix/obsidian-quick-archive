@@ -35,18 +35,18 @@ export default class FileChuckerPlugin extends Plugin {
 			id: "chuck-file",
 			name: "Chuck File",
 			checkCallback: (checking) => {
-				if (checking) {
-					// make sure the active view is a MarkdownView.
-					return !!this.app.workspace.getActiveViewOfType(
-						MarkdownView
-					);
-				}
-				let view = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (!view || !(view instanceof MarkdownView)) return;
+				// if (checking) {
+				// 	// make sure the active view is a MarkdownView.
+				// 	return !!this.app.workspace.getActiveViewOfType(
+				// 		MarkdownView
+				// 	);
+				// }
+				// let view = this.app.workspace.getActiveViewOfType(MarkdownView);
+				// if (!view || !(view instanceof MarkdownView)) return;
 
-				const currentFile = view.file;
+				const currentFile = this.app.workspace.getActiveFile();
 				if (currentFile) {
-					const originalFolder = currentFile.parent;
+					const originalFolder = currentFile?.parent;
 					const specifiedFolderPath = this.settings.archive_folder;
 					if (specifiedFolderPath != originalFolder.path) {(async () => {
 				
