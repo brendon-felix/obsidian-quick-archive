@@ -1,99 +1,188 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import {
+	App,
+	Notice,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+	TAbstractFile,
+	TFile,
+	TFolder,
+} from "obsidian";
 
-// Remember to rename these classes and interfaces!
+interface QuickArchiveSettings {
+	archiveFolder: string;
+}
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+const DEFAULT_SETTINGS: QuickArchiveSettings = {
+	archiveFolder: "",
+};
 
-	async onload() {
+const sanitizeFolderPath = (value: string): string => {
+	return value.trim().replace(/^\/+|\/+$/g, "");
+};
+
+const isFile = (item: TAbstractFile): item is TFile => item instanceof TFile;
+
+export default class QuickArchivePlugin extends Plugin {
+	settings: QuickArchiveSettings = DEFAULT_SETTINGS;
+
+	async onload(): Promise<void> {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
+			id: "archive-active-file",
+			name: "Archive active file",
 			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			}
+				void this.archiveActiveFile();
+			},
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
+		this.addSettingTab(new QuickArchiveSettingTab(this.app, this));
 	}
 
-	onunload() {
+	async updateArchiveFolder(rawValue: string): Promise<void> {
+		this.settings.archiveFolder = sanitizeFolderPath(rawValue);
+		await this.saveSettings();
 	}
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+	private getNextFileInFolder(
+		folder: TFolder,
+		currentFile: TFile,
+	): TFile | null {
+		const siblings = folder.children
+			.filter(
+				(item): item is TFile =>
+					isFile(item) && item.path !== currentFile.path,
+			)
+			.sort((a, b) =>
+				a.basename.localeCompare(b.basename, undefined, {
+					numeric: true,
+					sensitivity: "base",
+				}),
+			);
+
+		return siblings[0] ?? null;
 	}
 
-	async saveSettings() {
+	private async ensureFolderExists(folderPath: string): Promise<void> {
+		const segments = folderPath
+			.split("/")
+			.filter((segment) => segment.length > 0);
+
+		let currentPath = "";
+		for (const segment of segments) {
+			currentPath =
+				currentPath.length > 0 ? `${currentPath}/${segment}` : segment;
+
+			const existing = this.app.vault.getAbstractFileByPath(currentPath);
+			if (existing instanceof TFolder) {
+				continue;
+			}
+
+			if (existing !== null) {
+				throw new Error(
+					`Path exists and is not a folder: ${currentPath}`,
+				);
+			}
+
+			await this.app.vault.createFolder(currentPath);
+		}
+	}
+
+	private async archiveActiveFile(): Promise<void> {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (activeFile === null) {
+			new Notice("No active file to archive.");
+			return;
+		}
+
+		const targetFolderPath = sanitizeFolderPath(
+			this.settings.archiveFolder,
+		);
+		if (targetFolderPath.length === 0) {
+			new Notice("Set an archive folder in plugin settings first.");
+			return;
+		}
+
+		const sourceFolder = activeFile.parent ?? this.app.vault.getRoot();
+		if (sourceFolder.path === targetFolderPath) {
+			new Notice("Archive folder matches the current folder.");
+			return;
+		}
+
+		const nextFile = this.getNextFileInFolder(sourceFolder, activeFile);
+
+		try {
+			await this.ensureFolderExists(targetFolderPath);
+		} catch (error: unknown) {
+			new Notice(`Could not create archive folder: ${String(error)}`);
+			return;
+		}
+
+		const destinationPath = `${targetFolderPath}/${activeFile.name}`;
+
+		try {
+			await this.app.fileManager.renameFile(activeFile, destinationPath);
+		} catch (error: unknown) {
+			new Notice(`Could not archive file: ${String(error)}`);
+			return;
+		}
+
+		if (nextFile !== null) {
+			const leaf = this.app.workspace.getLeaf(true);
+			await leaf.openFile(nextFile);
+		}
+	}
+
+	private async loadSettings(): Promise<void> {
+		const data: unknown = await this.loadData();
+		this.settings = this.parseSettings(data);
+	}
+
+	private parseSettings(data: unknown): QuickArchiveSettings {
+		if (
+			typeof data === "object" &&
+			data !== null &&
+			"archiveFolder" in data &&
+			typeof (data as { archiveFolder: unknown }).archiveFolder ===
+				"string"
+		) {
+			return {
+				archiveFolder: sanitizeFolderPath(
+					(data as { archiveFolder: string }).archiveFolder,
+				),
+			};
+		}
+
+		return { ...DEFAULT_SETTINGS };
+	}
+
+	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
 	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
+class QuickArchiveSettingTab extends PluginSettingTab {
+	plugin: QuickArchivePlugin;
+
+	constructor(app: App, plugin: QuickArchivePlugin) {
+		super(app, plugin);
+		this.plugin = plugin;
 	}
 
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
+	display(): void {
+		const { containerEl } = this;
+		containerEl.empty();
 
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
+		new Setting(containerEl)
+			.setName("Archive folder")
+			.setDesc("Files are moved to this folder path.")
+			.addText((text) => {
+				text.setPlaceholder("Archive")
+					.setValue(this.plugin.settings.archiveFolder)
+					.onChange((value) => {
+						void this.plugin.updateArchiveFolder(value);
+					});
+			});
 	}
 }

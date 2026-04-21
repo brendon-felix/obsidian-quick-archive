@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
-	"version": "1.0.0",
+	"id": "quick-archive",
+	"name": "Quick Archive",
+	"version": "1.1.0",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "Plugin that allows you to quickly archive files.",
+	"author": "Brendon Felix",
+	"authorUrl": "https://github.com/brendon-felix/obsidian-quick-archive",
 	"isDesktopOnly": false
 }
