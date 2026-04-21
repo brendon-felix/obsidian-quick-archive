@@ -1,27 +1,64 @@
+import { Notice, Plugin, TAbstractFile, TFile, TFolder } from "obsidian";
 import {
-	App,
-	Notice,
-	Plugin,
-	PluginSettingTab,
-	Setting,
-	TAbstractFile,
-	TFile,
-	TFolder,
-} from "obsidian";
+	DEFAULT_SETTINGS,
+	QuickArchiveSettings,
+	QuickArchiveSettingTab,
+} from "./settings";
 
-interface QuickArchiveSettings {
-	archiveFolder: string;
-}
+type SortFn = (a: TFile, b: TFile) => number;
 
-const DEFAULT_SETTINGS: QuickArchiveSettings = {
-	archiveFolder: "",
-};
+type ExplorerSortOrder =
+	| "alphabetical"
+	| "alphabeticalReverse"
+	| "byCreatedTime"
+	| "byCreatedTimeReverse"
+	| "byModifiedTime"
+	| "byModifiedTimeReverse";
 
 const sanitizeFolderPath = (value: string): string => {
 	return value.trim().replace(/^\/+|\/+$/g, "");
 };
 
 const isFile = (item: TAbstractFile): item is TFile => item instanceof TFile;
+
+const isExplorerSortOrder = (value: unknown): value is ExplorerSortOrder => {
+	return (
+		value === "alphabetical" ||
+		value === "alphabeticalReverse" ||
+		value === "byCreatedTime" ||
+		value === "byCreatedTimeReverse" ||
+		value === "byModifiedTime" ||
+		value === "byModifiedTimeReverse"
+	);
+};
+
+const localeSorter: SortFn = (a: TFile, b: TFile) =>
+	a.basename.localeCompare(b.basename, undefined, {
+		numeric: true,
+		sensitivity: "base",
+	});
+
+const localeSorterReverse: SortFn = (a: TFile, b: TFile) =>
+	b.basename.localeCompare(a.basename, undefined, {
+		numeric: true,
+		sensitivity: "base",
+	});
+
+const ctimeSorter: SortFn = (a: TFile, b: TFile) => b.stat.ctime - a.stat.ctime;
+const ctimeSorterReverse: SortFn = (a: TFile, b: TFile) =>
+	a.stat.ctime - b.stat.ctime;
+const mtimeSorter: SortFn = (a: TFile, b: TFile) => b.stat.mtime - a.stat.mtime;
+const mtimeSorterReverse: SortFn = (a: TFile, b: TFile) =>
+	a.stat.mtime - b.stat.mtime;
+
+const SORTERS: Record<ExplorerSortOrder, SortFn> = {
+	alphabetical: localeSorter,
+	alphabeticalReverse: localeSorterReverse,
+	byCreatedTime: ctimeSorter,
+	byCreatedTimeReverse: ctimeSorterReverse,
+	byModifiedTime: mtimeSorter,
+	byModifiedTimeReverse: mtimeSorterReverse,
+};
 
 export default class QuickArchivePlugin extends Plugin {
 	settings: QuickArchiveSettings = DEFAULT_SETTINGS;
@@ -45,23 +82,53 @@ export default class QuickArchivePlugin extends Plugin {
 		await this.saveSettings();
 	}
 
+	private readExplorerSortOrder(): ExplorerSortOrder {
+		const explorerLeaf =
+			this.app.workspace.getLeavesOfType("file-explorer")[0];
+		if (explorerLeaf === undefined) {
+			return "alphabetical";
+		}
+
+		const state = explorerLeaf.getViewState().state;
+		if (typeof state !== "object" || state === null) {
+			return "alphabetical";
+		}
+
+		const sortOrder = (state as { sortOrder?: unknown }).sortOrder;
+		if (isExplorerSortOrder(sortOrder)) {
+			return sortOrder;
+		}
+
+		return "alphabetical";
+	}
+
 	private getNextFileInFolder(
 		folder: TFolder,
 		currentFile: TFile,
 	): TFile | null {
-		const siblings = folder.children
-			.filter(
-				(item): item is TFile =>
-					isFile(item) && item.path !== currentFile.path,
-			)
-			.sort((a, b) =>
-				a.basename.localeCompare(b.basename, undefined, {
-					numeric: true,
-					sensitivity: "base",
-				}),
-			);
+		const sortOrder = this.readExplorerSortOrder();
+		const sortFn = SORTERS[sortOrder] ?? localeSorter;
 
-		return siblings[0] ?? null;
+		const files = folder.children.filter(isFile).sort(sortFn);
+		if (files.length <= 1) {
+			return null;
+		}
+
+		const currentIndex = files.findIndex(
+			(file) => file.path === currentFile.path,
+		);
+		if (currentIndex === -1) {
+			return files[0] ?? null;
+		}
+
+		const nextIndex = (currentIndex + 1) % files.length;
+		const nextFile = files[nextIndex];
+
+		if (nextFile === undefined || nextFile.path === currentFile.path) {
+			return null;
+		}
+
+		return nextFile;
 	}
 
 	private async ensureFolderExists(folderPath: string): Promise<void> {
@@ -129,8 +196,10 @@ export default class QuickArchivePlugin extends Plugin {
 		}
 
 		if (nextFile !== null) {
-			const leaf = this.app.workspace.getLeaf(true);
-			await leaf.openFile(nextFile);
+			const leaf = this.app.workspace.getMostRecentLeaf();
+			if (leaf !== null) {
+				await leaf.openFile(nextFile);
+			}
 		}
 	}
 
@@ -140,18 +209,18 @@ export default class QuickArchivePlugin extends Plugin {
 	}
 
 	private parseSettings(data: unknown): QuickArchiveSettings {
-		if (
-			typeof data === "object" &&
-			data !== null &&
-			"archiveFolder" in data &&
-			typeof (data as { archiveFolder: unknown }).archiveFolder ===
-				"string"
-		) {
-			return {
-				archiveFolder: sanitizeFolderPath(
-					(data as { archiveFolder: string }).archiveFolder,
-				),
-			};
+		if (typeof data !== "object" || data === null) {
+			return { ...DEFAULT_SETTINGS };
+		}
+
+		const modern = (data as { archiveFolder?: unknown }).archiveFolder;
+		if (typeof modern === "string") {
+			return { archiveFolder: sanitizeFolderPath(modern) };
+		}
+
+		const legacy = (data as { archive_folder?: unknown }).archive_folder;
+		if (typeof legacy === "string") {
+			return { archiveFolder: sanitizeFolderPath(legacy) };
 		}
 
 		return { ...DEFAULT_SETTINGS };
@@ -159,30 +228,5 @@ export default class QuickArchivePlugin extends Plugin {
 
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
-	}
-}
-
-class QuickArchiveSettingTab extends PluginSettingTab {
-	plugin: QuickArchivePlugin;
-
-	constructor(app: App, plugin: QuickArchivePlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName("Archive folder")
-			.setDesc("Files are moved to this folder path.")
-			.addText((text) => {
-				text.setPlaceholder("Archive")
-					.setValue(this.plugin.settings.archiveFolder)
-					.onChange((value) => {
-						void this.plugin.updateArchiveFolder(value);
-					});
-			});
 	}
 }
